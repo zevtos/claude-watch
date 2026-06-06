@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -336,7 +336,6 @@
 				LastUpgradeCheck = 1430;
 			};
 			buildConfigurationList = 4281AE1AF1A10E30D5349DEE /* Build configuration list for PBXProject "ClaudeWatch" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -345,6 +344,8 @@
 			);
 			mainGroup = 7E45F0490F68854FB57BC594;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 753823119B1136E5162D8180 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -447,14 +448,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = T7HT4U4666;
+				DEVELOPMENT_TEAM = 69Q229R3R6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "ClaudeWatch iOS/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.shobhit.claudewatch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zevtos.claudewatch;
 				PRODUCT_NAME = "Agent Watch";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -470,11 +471,11 @@
 					arm64_32,
 				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				DEVELOPMENT_TEAM = T7HT4U4666;
+				DEVELOPMENT_TEAM = 69Q229R3R6;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = arm64e;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "ClaudeWatch watchOS/Info.plist";
-				PRODUCT_BUNDLE_IDENTIFIER = com.shobhit.claudewatch.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zevtos.claudewatch.watchkitapp;
 				PRODUCT_NAME = "Agent Watch";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -492,10 +493,11 @@
 					arm64_32,
 				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = 69Q229R3R6;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = arm64e;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "ClaudeWatch watchOS/Info.plist";
-				PRODUCT_BUNDLE_IDENTIFIER = com.shobhit.claudewatch.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zevtos.claudewatch.watchkitapp;
 				PRODUCT_NAME = "Agent Watch";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -629,13 +631,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 69Q229R3R6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "ClaudeWatch iOS/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.shobhit.claudewatch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zevtos.claudewatch;
 				PRODUCT_NAME = "Agent Watch";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
