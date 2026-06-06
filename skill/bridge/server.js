@@ -3,9 +3,9 @@ import crypto from "node:crypto";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
-import { spawn as childSpawn } from "node:child_process";
 import { Bonjour } from "bonjour-service";
+import { findBinary, spawnCli, IS_WIN } from "./platform.js";
+import { spawnPty, PTY_BACKEND, HAS_REAL_PTY } from "./pty.js";
 
 // ---------------------------------------------------------------------------
 // Logging (must be defined before use)
@@ -22,30 +22,25 @@ function log(level, msg, ...args) {
 }
 
 // ---------------------------------------------------------------------------
-// Binary discovery
+// Binary discovery (cross-platform — see platform.js)
 // ---------------------------------------------------------------------------
 
-function findBinary(name, candidates) {
-  for (const c of candidates) {
-    try { fs.accessSync(c, fs.constants.X_OK); return c; } catch { /* continue */ }
-  }
-  try {
-    return execSync(`which ${name} 2>/dev/null`, { encoding: "utf-8" }).trim();
-  } catch { /* fall through */ }
-  return null;
-}
+const winNpmCandidate = (name) =>
+  IS_WIN ? path.join(process.env.APPDATA || os.homedir(), "npm", name) : null;
 
 const CLAUDE_BIN = findBinary("claude", [
-  `${os.homedir()}/.local/bin/claude`,
+  path.join(os.homedir(), ".local", "bin", "claude"),
   "/usr/local/bin/claude",
   "/opt/homebrew/bin/claude",
-]);
+  winNpmCandidate("claude"),
+].filter(Boolean));
 
 const CODEX_BIN = findBinary("codex", [
-  `${os.homedir()}/.local/bin/codex`,
+  path.join(os.homedir(), ".local", "bin", "codex"),
   "/usr/local/bin/codex",
   "/opt/homebrew/bin/codex",
-]);
+  winNpmCandidate("codex"),
+].filter(Boolean));
 
 if (!CLAUDE_BIN) {
   log("warn", "Could not find 'claude' binary — Claude sessions will not be available.");
@@ -262,44 +257,32 @@ function spawnInteractiveProcess(agent, cwd, args = []) {
   const cols = parseInt(process.env.COLUMNS, 10) || 120;
   const rows = parseInt(process.env.LINES, 10) || 40;
 
-  return childSpawn("script", ["-q", "/dev/null", bin, ...args], {
-    cwd,
-    env: {
-      ...process.env,
-      TERM: "xterm-256color",
-      COLUMNS: String(cols),
-      LINES: String(rows),
-    },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  return spawnPty(bin, args, { cwd, cols, rows });
 }
 
 function bindPtyProcess(slot, proc) {
   const sessionId = slot.id;
   slot.ptyProcess = proc;
 
-  proc.stdout.on("data", (data) => {
-    pushSseEvent("pty-output", { text: data.toString() }, sessionId);
+  proc.onData((text) => {
+    pushSseEvent("pty-output", { text }, sessionId);
   });
 
-  proc.stderr.on("data", (data) => {
-    pushSseEvent("pty-output", { text: data.toString() }, sessionId);
-  });
-
-  proc.on("close", (exitCode, signal) => {
-    log("info", `Session ${sessionId} (${slot.agent}) PTY exited: code=${exitCode} signal=${signal}`);
+  proc.onExit(({ exitCode, signal, error }) => {
+    if (error) {
+      log("error", `Session ${sessionId} PTY spawn error: ${error.message || error}`);
+    } else {
+      log("info", `Session ${sessionId} (${slot.agent}) PTY exited: code=${exitCode} signal=${signal}`);
+    }
     slot.state = "ended";
     slot.ptyProcess = null;
-    clearCodexSyntheticPermissionForSession(sessionId, "pty-closed");
-    pushSseEvent("session", { state: "ended", exitCode, signal, agent: slot.agent, folderName: slot.folderName }, sessionId);
-  });
-
-  proc.on("error", (err) => {
-    log("error", `Session ${sessionId} PTY spawn error: ${err.message}`);
-    slot.state = "ended";
-    slot.ptyProcess = null;
-    clearCodexSyntheticPermissionForSession(sessionId, "pty-error");
-    pushSseEvent("session", { state: "ended", error: err.message, agent: slot.agent, folderName: slot.folderName }, sessionId);
+    clearCodexSyntheticPermissionForSession(sessionId, error ? "pty-error" : "pty-closed");
+    pushSseEvent("session", {
+      state: "ended",
+      ...(error ? { error: error.message || String(error) } : { exitCode, signal }),
+      agent: slot.agent,
+      folderName: slot.folderName,
+    }, sessionId);
   });
 }
 
@@ -665,7 +648,7 @@ function resolveCodexSyntheticPermission(permissionId, selectedOption, optionInd
   if (!slot) return false;
 
   const proc = slot.ptyProcess || attachPtyToSession(slot);
-  if (!proc || !proc.stdin) return false;
+  if (!proc || typeof proc.write !== "function") return false;
 
   let input = "\u001b";
   const normalizedIndex = Number.isInteger(optionIndex) ? optionIndex : -1;
@@ -679,7 +662,7 @@ function resolveCodexSyntheticPermission(permissionId, selectedOption, optionInd
     input = "2\n";
   }
 
-  proc.stdin.write(input);
+  proc.write(input);
   clearCodexSyntheticPermissionForSession(synthetic.sessionId, "resolved");
   log("info", `Resolved Codex approval ${permissionId} for session ${synthetic.sessionId}`);
   return true;
@@ -1090,7 +1073,7 @@ async function handleCommand(req, res) {
         targetSession.state = "running";
         pushSseEvent("session", { state: "running", agent: targetSession.agent, cwd: targetSession.cwd, folderName: targetSession.folderName }, sessionId);
 
-        const proc = childSpawn(bin, args, {
+        const proc = spawnCli(bin, args, {
           cwd: targetSession.cwd,
           env: { ...process.env },
           stdio: ["ignore", "pipe", "pipe"],
@@ -1134,7 +1117,7 @@ async function handleCommand(req, res) {
       const slot = sessions.get(newId);
       setTimeout(() => {
         if (slot && slot.ptyProcess) {
-          slot.ptyProcess.stdin.write(command);
+          slot.ptyProcess.write(command);
           log("info", `Command injected into new ${requestedAgent} session ${newId} (${command.length} chars)`);
         }
       }, 500);
@@ -1142,7 +1125,7 @@ async function handleCommand(req, res) {
     }
 
     try {
-      targetSession.ptyProcess.stdin.write(command);
+      targetSession.ptyProcess.write(command);
       log("info", `Command injected into session ${targetSession.id} (${command.length} chars)`);
       return jsonResponse(res, 200, { ok: true, sessionId: targetSession.id, agent: targetSession.agent });
     } catch (err) {
@@ -1478,22 +1461,27 @@ async function startServer() {
 
   const code = generatePairingCode();
 
-  // Bonjour
-  bonjourInstance = new Bonjour();
-  bonjourService = bonjourInstance.publish({
-    name: `Agent Watch Bridge (${os.hostname()})`,
-    type: "claude-watch",
-    protocol: "tcp",
-    port: boundPort,
-    txt: {
-      version: "2",
-      bridgeId: BRIDGE_ID,
-      sessionId: BRIDGE_ID, // backward compat
-      machineName: os.hostname(),
-    },
-  });
-
-  log("info", `Bonjour advertising _claude-watch._tcp on port ${boundPort}`);
+  // Bonjour — LAN discovery. Best-effort: a server without multicast (cloud VM,
+  // restricted network) must not crash the bridge; manual IP / HTTPS still works.
+  try {
+    bonjourInstance = new Bonjour();
+    bonjourService = bonjourInstance.publish({
+      name: `Agent Watch Bridge (${os.hostname()})`,
+      type: "claude-watch",
+      protocol: "tcp",
+      port: boundPort,
+      txt: {
+        version: "2",
+        bridgeId: BRIDGE_ID,
+        sessionId: BRIDGE_ID, // backward compat
+        machineName: os.hostname(),
+      },
+    });
+    log("info", `Bonjour advertising _claude-watch._tcp on port ${boundPort}`);
+  } catch (err) {
+    log("warn", `Bonjour discovery unavailable (${err.message}); use manual IP / HTTPS on the watch.`);
+  }
+  log("info", `Platform: ${process.platform}/${process.arch} · PTY backend: ${PTY_BACKEND}${HAS_REAL_PTY ? "" : " (degraded — install node-pty for interactive sessions)"}`);
   startCodexMonitor();
 
   const agents = [];

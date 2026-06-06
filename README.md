@@ -31,13 +31,13 @@ https://github.com/user-attachments/assets/5f478c28-2086-4696-9d76-e43dda853201
 - **Dynamic questions** — answer `AskUserQuestion` prompts with all options displayed
 - **Voice commands** — dictate commands to Claude via watchOS dictation
 - **iPhone companion** — pairing UI, connection status, terminal preview, permission approvals
-- **Bridge server** — Node.js server on your Mac that connects Claude Code to the watch via HTTP hooks + SSE
+- **Bridge server** — cross-platform Node.js server (macOS / Linux / Windows) that connects Claude Code to the watch via HTTP hooks + SSE
 
 ## Architecture
 
 The system has three components:
 
-### 1. Bridge Server (Mac)
+### 1. Bridge Server (macOS / Linux / Windows)
 A Node.js HTTP server (`skill/bridge/server.js`) that:
 - Receives events from Claude Code via [HTTP hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) (`PostToolUse`, `PermissionRequest`, `Stop`, etc.)
 - Streams events to connected clients via Server-Sent Events (SSE)
@@ -64,9 +64,9 @@ A SwiftUI watchOS app that:
 ## Quick Start
 
 ### Prerequisites
-- macOS with Node.js 18+
-- Xcode 16+ with watchOS SDK
-- Apple Watch on the same Wi-Fi as your Mac
+- **Bridge host:** macOS, Linux, or Windows with Node.js 18+
+- Xcode 16+ with watchOS SDK (to build the watch/iOS app)
+- Apple Watch on the same Wi-Fi as the bridge host (or a reachable HTTPS endpoint — see below)
 - Claude Code CLI installed
 
 ### Apple Watch Wi-Fi Setup
@@ -85,10 +85,14 @@ npm install
 This configures all Claude Code sessions to stream events to the bridge:
 
 ```bash
+# macOS / Linux (also installs the optional codex-watch wrapper)
 ./skill/setup-hooks.sh
+
+# Any platform incl. Windows (no bash/python needed)
+node skill/setup-hooks.mjs
 ```
 
-To remove hooks later: `./skill/setup-hooks.sh --remove`
+To remove hooks later: `./skill/setup-hooks.sh --remove` (or `node skill/setup-hooks.mjs --remove`)
 
 ### 3. Start the bridge server
 
@@ -252,12 +256,27 @@ The `setup-hooks.sh` script installs these HTTP hooks globally in `~/.claude/set
 
 | Component | Minimum Version |
 |-----------|----------------|
-| macOS | 13.0+ |
+| Bridge host OS | macOS 13.0+, Linux, or Windows 10+ |
 | Node.js | 18+ |
-| Xcode | 16+ |
+| Xcode (to build the app) | 16+ |
 | iOS | 17.0 |
 | watchOS | 10.0 |
 | Claude Code | 2.1+ |
+
+### Cross-platform notes
+
+The bridge runs anywhere Node.js 18+ does. Platform-specific behavior is isolated
+in `skill/bridge/platform.js` (binary discovery, process spawning) and
+`skill/bridge/pty.js` (PTY backend):
+
+- **PTY backend** is selected automatically: `node-pty` when available (best —
+  macOS, Linux, Windows/ConPTY), otherwise a `script(1)` fallback on POSIX. The
+  startup log prints which backend is active.
+- **`node-pty` is optional** and only needed to *spawn interactive sessions from
+  the watch*. Event monitoring, output streaming, and permission approvals need
+  no PTY and work on every platform without it.
+- **Bonjour/mDNS** discovery is best-effort; on a server or restricted network
+  where it's unavailable, connect via manual IP or an HTTPS endpoint instead.
 
 ## Troubleshooting
 
