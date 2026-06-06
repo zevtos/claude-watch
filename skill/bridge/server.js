@@ -1,3 +1,4 @@
+import "./env.js"; // side-effect: load bridge.env into process.env (must be first)
 import http from "node:http";
 import crypto from "node:crypto";
 import os from "node:os";
@@ -6,6 +7,7 @@ import path from "node:path";
 import { Bonjour } from "bonjour-service";
 import { findBinary, spawnCli, IS_WIN } from "./platform.js";
 import { spawnPty, PTY_BACKEND, HAS_REAL_PTY } from "./pty.js";
+import { sendPairingCode, telegramEnabled } from "./telegram.js";
 
 // ---------------------------------------------------------------------------
 // Logging (must be defined before use)
@@ -69,6 +71,10 @@ const CODEX_SESSION_SCAN_LIMIT = 25;
 const CODEX_SESSION_ROOT = path.join(os.homedir(), ".codex", "sessions");
 const CODEX_LOG_FILE = path.join(os.homedir(), ".codex", "log", "codex-tui.log");
 const BRIDGE_ID = crypto.randomUUID();
+// Public endpoint to surface in pairing notifications (e.g. an HTTPS tunnel).
+const PUBLIC_URL = process.env.CLAUDE_WATCH_PUBLIC_URL || "";
+// Actual bound port — set once the server is listening (used by notifications).
+let servicePort = null;
 
 // ---------------------------------------------------------------------------
 // State
@@ -128,6 +134,17 @@ function generatePairingCode() {
   pairingCode = code;
   pairingCodeExpiresAt = Date.now() + PAIRING_CODE_TTL_MS;
   log("info", `Pairing code generated: ${code} (expires in 5 minutes)`);
+  // Fire-and-forget Telegram notification (no-op unless configured).
+  sendPairingCode(
+    code,
+    {
+      host: os.hostname(),
+      port: servicePort,
+      publicUrl: PUBLIC_URL,
+      ttlMinutes: Math.round(PAIRING_CODE_TTL_MS / 60000),
+    },
+    log,
+  );
   return code;
 }
 
@@ -1439,16 +1456,27 @@ async function startServer() {
   const server = http.createServer(onRequest);
 
   let boundPort = null;
-  for (let port = PORT_RANGE_START; port <= PORT_RANGE_END; port++) {
+  const fixedPort = parseInt(process.env.PORT, 10);
+  if (Number.isInteger(fixedPort) && fixedPort > 0) {
+    // Explicit port (service deployments behind a tunnel/reverse proxy).
     try {
-      boundPort = await tryListen(server, port);
-      break;
+      boundPort = await tryListen(server, fixedPort);
     } catch (err) {
-      if (err.code === "EADDRINUSE") {
-        log("warn", `Port ${port} in use, trying next...`);
-        continue;
+      log("error", `Cannot bind PORT=${fixedPort}: ${err.code || err.message}`);
+      process.exit(1);
+    }
+  } else {
+    for (let port = PORT_RANGE_START; port <= PORT_RANGE_END; port++) {
+      try {
+        boundPort = await tryListen(server, port);
+        break;
+      } catch (err) {
+        if (err.code === "EADDRINUSE") {
+          log("warn", `Port ${port} in use, trying next...`);
+          continue;
+        }
+        throw err;
       }
-      throw err;
     }
   }
 
@@ -1457,7 +1485,11 @@ async function startServer() {
     process.exit(1);
   }
 
+  servicePort = boundPort;
   log("info", `Bridge server listening on 0.0.0.0:${boundPort}`);
+  log("info", telegramEnabled()
+    ? "Telegram notifications: ENABLED (pairing codes will be sent)"
+    : "Telegram notifications: disabled (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
 
   const code = generatePairingCode();
 

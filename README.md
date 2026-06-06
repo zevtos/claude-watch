@@ -237,9 +237,56 @@ The `setup-hooks.sh` script installs these HTTP hooks globally in `~/.claude/set
 
 ### Bridge Server
 
+Config is read from the environment, or from a `bridge.env` file
+(`./bridge.env` or `~/.config/claude-watch/bridge.env`; see
+[`bridge.env.example`](skill/bridge/bridge.env.example)). Real env vars win.
+
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `PORT` | 7860 | Starting port (tries 7860-7869) |
+| `PORT` | _(scan)_ | Bind this exact port. Unset → scan 7860–7869 |
+| `TELEGRAM_BOT_TOKEN` | — | Bot token from [@BotFather](https://t.me/BotFather) — enables pairing-code DMs |
+| `TELEGRAM_CHAT_ID` | — | Your numeric id from [@userinfobot](https://t.me/userinfobot) |
+| `CLAUDE_WATCH_PUBLIC_URL` | — | Public endpoint shown in the Telegram message (e.g. your HTTPS tunnel) |
+| `CLAUDE_WATCH_ENV_FILE` | — | Override the env-file path |
+
+### Telegram pairing-code notifications
+
+Get the 6-digit pairing code (and any regenerated code) pushed to Telegram —
+handy for a headless server where you can't see the console banner.
+
+1. Create a bot with [@BotFather](https://t.me/BotFather), copy the token.
+2. Get your numeric user id from [@userinfobot](https://t.me/userinfobot).
+3. Send your bot any message once (so it's allowed to DM you).
+4. Put both into `bridge.env`:
+   ```ini
+   TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+   TELEGRAM_CHAT_ID=123456789
+   ```
+5. Restart the bridge. Startup logs show `Telegram notifications: ENABLED`.
+
+### Run as a service (auto-start on boot)
+
+For a server that must come back after reboot:
+
+```bash
+cd skill/bridge && npm install           # once
+./skill/service/install-service.sh       # Linux systemd (sudo) / macOS launchd
+```
+
+- **Linux:** installs `/etc/systemd/system/claude-watch-bridge.service`, enabled
+  + started. `--user` installs a per-user unit (no sudo, enables linger so it
+    survives logout). Logs: `journalctl -u claude-watch-bridge -f`.
+- **macOS:** installs a launchd LaunchAgent that runs at load and restarts on
+  crash. Logs: `~/Library/Logs/claude-watch-bridge.log`.
+- **Windows:** no native script — wrap `node server.js` with
+  [NSSM](https://nssm.cc/) or a Task Scheduler "At startup" task.
+
+The installer creates `~/.config/claude-watch/bridge.env` (chmod 600) from the
+example on first run — edit it with your Telegram token, then
+`./skill/service/install-service.sh` again (or restart the service).
+
+Remove: `./skill/service/install-service.sh --uninstall` ·
+Status: `./skill/service/install-service.sh --status`
 
 ### Removing Hooks
 

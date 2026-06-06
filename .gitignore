@@ -16,3 +16,8 @@
 *.swp
 *.swo
 *~
+
+# Local secrets / runtime config (keep *.example tracked)
+bridge.env
+*.env
+!*.env.example

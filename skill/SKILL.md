@@ -33,3 +33,11 @@ without it; only wrist-initiated interactive sessions are unavailable.
 Install hooks (all platforms): `node skill/setup-hooks.mjs`
 (POSIX shells can also use `skill/setup-hooks.sh`, which additionally wires up
 the optional `codex-watch` wrapper.)
+
+## Run on a server
+- Auto-start on boot: `skill/service/install-service.sh` (Linux systemd / macOS
+  launchd; `--user`, `--uninstall`, `--status`).
+- Pairing codes to Telegram: set `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` in
+  `~/.config/claude-watch/bridge.env` (see `skill/bridge/bridge.env.example`).
+- Reach the bridge from the watch over the internet via an HTTPS tunnel and set
+  `CLAUDE_WATCH_PUBLIC_URL` so the URL appears in the Telegram message.
